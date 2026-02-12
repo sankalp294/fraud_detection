@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+venv/
+env/
+
+# Data / models
+*.pkl
+*.joblib
+preprocessed_dataset.csv
+/Infernce/policy_history/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store

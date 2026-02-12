@@ -1,0 +1,164 @@
+from __future__ import annotations
+import json
+import sys
+from pathlib import Path
+
+import joblib
+import pandas as pd
+
+# -------------------------
+# Project Root Setup
+# -------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[1]  # parent of Inference folder
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# -------------------------
+# Local imports
+# -------------------------
+from model_training.preprocessing import preprocess
+from reasoning_engine import generate_reasoning
+
+# -------------------------
+# Paths
+# -------------------------
+MODELS_DIR = PROJECT_ROOT / "model_training" / "models"
+POLICY_HISTORY_DIR = PROJECT_ROOT / "Inference" / "policy_history"
+
+MODEL_PATH = MODELS_DIR / "fraud_model.pkl"
+SCALER_PATH = MODELS_DIR / "scaler.pkl"
+ANOMALY_MODEL_PATH = MODELS_DIR / "anomaly_model.pkl"
+ENCODERS_PATH = MODELS_DIR / "label_encoders.pkl"
+FEATURE_MAPS_PATH = MODELS_DIR / "feature_maps.pkl"
+METADATA_PATH = MODELS_DIR / "training_metadata.json"
+
+# -------------------------
+# Load models
+# -------------------------
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
+anomaly_model = joblib.load(ANOMALY_MODEL_PATH)
+label_encoders = joblib.load(ENCODERS_PATH)
+feature_bundle = joblib.load(FEATURE_MAPS_PATH) if FEATURE_MAPS_PATH.exists() else {}
+
+# -------------------------
+# Load metadata
+# -------------------------
+with open(METADATA_PATH, "r", encoding="utf-8") as f:
+    metadata = json.load(f)
+
+feature_columns = [str(c).strip() for c in metadata["fraud_classifier"]["feature_columns"]]
+anomaly_feature_columns = [str(c).strip() for c in metadata["anomaly"]["feature_columns"]]
+fraud_threshold = float(metadata["fraud_classifier"]["optimal_threshold"])
+anomaly_threshold = float(metadata["anomaly"]["threshold"])
+
+
+# -------------------------
+# Load policy history JSON
+# -------------------------
+def load_policy_history(policy_id: str) -> pd.DataFrame:
+    file_path = POLICY_HISTORY_DIR / f"{policy_id}.json"
+    if not file_path.exists():
+        raise FileNotFoundError(f"No policy history found for policy_id: {policy_id}")
+    
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    
+    return pd.DataFrame(data)
+
+
+# -------------------------
+# Compute context features from history
+# -------------------------
+def compute_context_features(history_df: pd.DataFrame, new_claim_df: pd.DataFrame) -> pd.DataFrame:
+    """Attach policy, user, hospital level features to new claim row"""
+    
+    new_claim = new_claim_df.copy()
+    
+    # -------------------------
+    # Policy-level features
+    # -------------------------
+    new_claim["cover_amount"] = pd.to_numeric(new_claim["cover_amount"], errors="coerce")
+    new_claim["policy_total_claims"] = len(history_df)
+    new_claim["policy_avg_claim"] = history_df["cover_amount"].astype(float).mean()
+    
+    history_df["checkin_date"] = pd.to_datetime(history_df["checkin_date"], errors="coerce")
+    duration_months = ((history_df["checkin_date"].max() - history_df["checkin_date"].min()).days) / 30
+    duration_months = max(duration_months, 1)
+    new_claim["policy_claim_velocity"] = new_claim["policy_total_claims"] / duration_months
+
+    # -------------------------
+    # User-level features
+    # -------------------------
+    user_id = new_claim["insured_id"].iloc[0]
+    user_history = history_df[history_df["insured_id"] == user_id]
+    new_claim["user_total_claims"] = len(user_history)
+    new_claim["user_max_claim"] = user_history["cover_amount"].astype(float).max() if len(user_history) > 0 else 0
+    new_claim["insured_cancel_count"] = (user_history["checkout_status_name"] == "Cancelled").sum() if len(user_history) > 0 else 0
+
+    # -------------------------
+    # Hospital-level features
+    # -------------------------
+    hospital_id = new_claim["hospital_id"].iloc[0]
+    hospital_history = history_df[history_df["hospital_id"] == hospital_id]
+    new_claim["hospital_total_claims"] = len(hospital_history)
+    new_claim["hospital_cancel_count"] = (hospital_history["checkout_status_name"] == "Cancelled").sum() if len(hospital_history) > 0 else 0
+
+    return new_claim
+
+
+# -------------------------
+# Predict fraud/anomaly for new claim
+# -------------------------
+def predict_new_claim(history_df: pd.DataFrame, new_claim_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    history_df: full policy history
+    new_claim_df: only new claim row
+    """
+    # Attach context
+    claim_with_context = compute_context_features(history_df, new_claim_df)
+    
+    # Preprocess new claim only
+    claim_with_context = preprocess(claim_with_context, require_label=False)
+    
+    # Encode categoricals safely
+    unknown_token = "__UNK__"
+    cat_cols = claim_with_context.select_dtypes(include=["object"]).columns
+    for col in cat_cols:
+        if col in label_encoders:
+            le = label_encoders[col]
+            vals = claim_with_context[col].astype(str)
+            if unknown_token in le.classes_:
+                vals = vals.where(vals.isin(le.classes_), other=unknown_token)
+            else:
+                fallback = "Unknown" if "Unknown" in le.classes_ else le.classes_[0]
+                vals = vals.where(vals.isin(le.classes_), other=fallback)
+            claim_with_context[col] = le.transform(vals)
+        else:
+            claim_with_context[col] = 0
+    
+    # Align features
+    X = claim_with_context.reindex(columns=feature_columns, fill_value=0)
+    X_scaled = scaler.transform(X.to_numpy())
+
+    # Fraud prediction
+    fraud_prob = model.predict_proba(X_scaled)[:, 1]
+    fraud_threshold = 0.7
+    fraud_flag = (fraud_prob >= fraud_threshold).astype(int)
+
+    # Anomaly prediction
+    anomaly_input = X.reindex(columns=anomaly_feature_columns, fill_value=0)
+    anomaly_scores = anomaly_model.decision_function(anomaly_input.to_numpy())
+    is_sus = (anomaly_scores < anomaly_threshold).astype(int)
+
+    # Attach results
+    claim_with_context["fraud_prob"] = fraud_prob
+    claim_with_context["fraud_flag"] = fraud_flag
+    claim_with_context["fraud_threshold"] = fraud_threshold
+    claim_with_context["anomaly_score"] = anomaly_scores
+    claim_with_context["is_sus"] = is_sus
+
+    # Generate reasoning
+    claim_with_context["reason_codes"] = claim_with_context.apply(generate_reasoning, axis=1)
+
+    return claim_with_context
