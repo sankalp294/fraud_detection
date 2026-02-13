@@ -139,16 +139,20 @@ def predict_new_claim(history_df: pd.DataFrame, new_claim_df: pd.DataFrame) -> p
     
     # Align features
     X = claim_with_context.reindex(columns=feature_columns, fill_value=0)
-    X_scaled = scaler.transform(X.to_numpy())
 
+    # sanity check — feature order & names
+    print("Feature alignment OK:", list(X.columns) == feature_columns)
+
+    X_scaled = scaler.transform(X)
+    
     # Fraud prediction
     fraud_prob = model.predict_proba(X_scaled)[:, 1]
-    fraud_threshold = 0.7
+    fraud_threshold = 0.6
     fraud_flag = (fraud_prob >= fraud_threshold).astype(int)
 
     # Anomaly prediction
     anomaly_input = X.reindex(columns=anomaly_feature_columns, fill_value=0)
-    anomaly_scores = anomaly_model.decision_function(anomaly_input.to_numpy())
+    anomaly_scores = anomaly_model.decision_function(anomaly_input)
     is_sus = (anomaly_scores < anomaly_threshold).astype(int)
 
     # Attach results

@@ -14,7 +14,7 @@ def generate_reasoning(row):
     if row.get("fraud_flag") == 1:
         # Claim high compared to policy average
         policy_avg = row.get("policy_avg_claim", 0)
-        if policy_avg > 0 and row.get("cover_amount", 0) > 1.2 * policy_avg:
+        if policy_avg > 0 and row.get("cover_amount", 0) > policy_avg:
             reasons.append("Claim amount is high compared to average policy claims")
 
         # High user claim frequency
@@ -24,7 +24,10 @@ def generate_reasoning(row):
             reasons.append("User has unusually high number of claims")
 
         # User history of high claims
-        if row.get("user_max_claim", 0) > 500000:
+        user_claims = float(row.get("user_total_claims", 0) or 0)
+        user_max = float(row.get("user_max_claim", 0) or 0)
+
+        if user_claims >= 2 and user_max > 500000:
             reasons.append("User has history of high claim amounts")
 
         # Hospital frequent usage
