@@ -1,66 +1,131 @@
 import numpy as np
 
+
+def safe_float(val):
+    try:
+        return float(val)
+    except:
+        return 0.0
+
+
 def generate_reasoning(row):
     """
-    Generate human-readable reasoning for a single new claim
-    based on history-derived context features.
+    Production-grade reasoning generator.
+    Works with API-based data + model outputs.
     """
+
+    fraud_flag = row.get("fraud_flag", 0)
+    anomaly_flag = row.get("is_sus", 0)
+
+    # ---------------------------------------------------
+    # HARD NORMAL GUARD (NEW FIX)
+    # ---------------------------------------------------
+    if fraud_flag == 0 and anomaly_flag == 0:
+        return ["Claim appears normal based on history and model signals"]
 
     reasons = []
 
-    # -------------------------
-    # FRAUD-BASED REASONS
-    # -------------------------
-    if row.get("fraud_flag") == 1:
-        # Claim high compared to policy average
-        policy_avg = row.get("policy_avg_claim", 0)
-        if policy_avg > 0 and row.get("cover_amount", 0) > policy_avg:
-            reasons.append("Claim amount is high compared to average policy claims")
+    fraud_prob = safe_float(row.get("fraud_prob", 0))
 
-        # High user claim frequency
-        user_claims = row.get("user_total_claims", 0)
-        policy_claims = row.get("policy_total_claims", 1)
-        if user_claims > 0 and user_claims > max(10, 2 * policy_claims):
-            reasons.append("User has unusually high number of claims")
+    cover_amount = safe_float(row.get("cover_amount", 0))
+    policy_avg = safe_float(row.get("policy_avg_claim", 0))
+    policy_claims = safe_float(row.get("policy_total_claims", 0))
+    user_claims = safe_float(row.get("user_total_claims", 0))
+    user_max = safe_float(row.get("user_max_claim", 0))
+    hospital_claims = safe_float(row.get("hospital_total_claims", 0))
 
-        # User history of high claims
-        user_claims = float(row.get("user_total_claims", 0) or 0)
-        user_max = float(row.get("user_max_claim", 0) or 0)
+    insured_cancel = safe_float(row.get("insured_cancel_count", 0))
+    hospital_cancel = safe_float(row.get("hospital_cancel_count", 0))
 
-        if user_claims >= 2 and user_max > 500000:
-            reasons.append("User has history of high claim amounts")
+    anomaly_score = safe_float(row.get("anomaly_score", 0))
+    policy_velocity = safe_float(row.get("policy_claim_velocity", 0))
 
-        # Hospital frequent usage
-        if row.get("hospital_total_claims", 0) > 20:
-            reasons.append("Hospital frequently used in claims")
 
-        # Cancellation patterns
-        if row.get("insured_cancel_count", 0) > 2:
-            reasons.append("User cancellation history is high")
-        if row.get("hospital_cancel_count", 0) > 5:
-            reasons.append("Hospital cancellation rate is high")
+    # ---------------------------------------------------
+    # MODEL-DRIVEN SIGNALS
+    # ---------------------------------------------------
 
-    # -------------------------
-    # ANOMALY-BASED REASONS
-    # -------------------------
-    if row.get("is_sus") == 1:
-        anomaly_score = row.get("anomaly_score", 0)
-        if anomaly_score < -0.03:
-            reasons.append("Claim pattern deviates from normal history")
+    if fraud_flag == 1:
 
-        policy_velocity = row.get("policy_claim_velocity", 0)
-        # Use relative threshold to policy avg claims
-        if policy_velocity > 2 * max(1, row.get("policy_total_claims", 1)/12):
-            reasons.append("Policy shows unusually high claim frequency")
+        if fraud_prob >= 0.85:
+            reasons.append("Very high fraud probability detected by model")
 
-    # -------------------------
-    # FALLBACK
-    # -------------------------
+        elif fraud_prob >= 0.70:
+            reasons.append("Strong fraud pattern detected from historical behaviour")
+
+        elif fraud_prob >= 0.60:
+            reasons.append("Moderate fraud risk based on model prediction")
+
+    if anomaly_flag == 1:
+        if anomaly_score < -0.08:
+            reasons.append("Severe deviation from normal claim behaviour")
+
+        elif anomaly_score < -0.04:
+            reasons.append("Claim behaviour deviates from past patterns")
+
+
+    # ---------------------------------------------------
+    # CLAIM AMOUNT BEHAVIOUR
+    # ---------------------------------------------------
+
+    if policy_avg > 0:
+
+        if cover_amount > 2 * policy_avg:
+            reasons.append("Claim amount significantly higher than policy average")
+
+        elif cover_amount > policy_avg:
+            reasons.append("Claim amount higher than usual policy pattern")
+
+
+    # ---------------------------------------------------
+    # USER BEHAVIOUR
+    # ---------------------------------------------------
+
+    if user_claims >= 3:
+        reasons.append("User has frequent claim history")
+
+    if user_claims >= 2 and user_max > 600000:
+        reasons.append("User previously made high-value claims")
+
+    if insured_cancel >= 2:
+        reasons.append("User has repeated claim cancellations")
+
+
+    # ---------------------------------------------------
+    # HOSPITAL BEHAVIOUR
+    # ---------------------------------------------------
+
+    if hospital_claims >= 15:
+        reasons.append("Hospital frequently appears in claims data")
+
+    if hospital_cancel >= 4:
+        reasons.append("Hospital shows elevated cancellation pattern")
+
+
+    # ---------------------------------------------------
+    # POLICY BEHAVIOUR
+    # ---------------------------------------------------
+
+    if policy_claims >= 50:
+        reasons.append("Policy has unusually high claim volume")
+
+    if policy_velocity > 1.5:
+        reasons.append("Claims occurring rapidly within policy duration")
+
+
+    # ---------------------------------------------------
+    # ANOMALY CONTEXT
+    # ---------------------------------------------------
+
+    if anomaly_flag == 1 and policy_velocity > 1:
+        reasons.append("Anomalous claim timing pattern observed")
+
+
+    # ---------------------------------------------------
+    # FINAL FALLBACK CONTROL
+    # ---------------------------------------------------
+
     if not reasons:
-        # Only fallback if claim not flagged
-        if row.get("fraud_flag") == 1 or row.get("is_sus") == 1:
-            reasons.append("Flagged due to model threshold but no strong indicators detected")
-        else:
-            reasons.append("Claim appears normal based on historical context")
+        reasons.append("Flagged by model due to hidden risk patterns")
 
     return reasons

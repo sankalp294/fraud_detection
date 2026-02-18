@@ -56,15 +56,15 @@ anomaly_threshold = float(metadata["anomaly"]["threshold"])
 # -------------------------
 # Load policy history JSON
 # -------------------------
-def load_policy_history(policy_id: str) -> pd.DataFrame:
-    file_path = POLICY_HISTORY_DIR / f"{policy_id}.json"
-    if not file_path.exists():
-        raise FileNotFoundError(f"No policy history found for policy_id: {policy_id}")
+# def load_policy_history(policy_id: str) -> pd.DataFrame:
+#     file_path = POLICY_HISTORY_DIR / f"{policy_id}.json"
+#     if not file_path.exists():
+#         raise FileNotFoundError(f"No policy history found for policy_id: {policy_id}")
     
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+#     with open(file_path, "r", encoding="utf-8") as f:
+#         data = json.load(f)
     
-    return pd.DataFrame(data)
+#     return pd.DataFrame(data)
 
 
 # -------------------------
@@ -99,10 +99,21 @@ def compute_context_features(history_df: pd.DataFrame, new_claim_df: pd.DataFram
     # -------------------------
     # Hospital-level features
     # -------------------------
-    hospital_id = new_claim["hospital_id"].iloc[0]
+
+    hospital_id = str(new_claim["hospital_id"].iloc[0]).strip()
+    history_df["hospital_id"] = history_df["hospital_id"].astype(str).str.strip()
+
     hospital_history = history_df[history_df["hospital_id"] == hospital_id]
+
     new_claim["hospital_total_claims"] = len(hospital_history)
-    new_claim["hospital_cancel_count"] = (hospital_history["checkout_status_name"] == "Cancelled").sum() if len(hospital_history) > 0 else 0
+
+    new_claim["hospital_cancel_count"] = (
+        (hospital_history["checkout_status_name"] == "Cancelled").sum()
+        if len(hospital_history) > 0 else 0
+    )
+
+    # print("Hospital history rows:", len(hospital_history))
+    # print(history_df["hospital_id"].value_counts().head(10))
 
     return new_claim
 

@@ -1,19 +1,88 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# -------------------------
+# ENV / SECRETS
+# -------------------------
+.env
+.env.*
 *.env
+config.py
+
+# -------------------------
+# PYTHON CACHE
+# -------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# -------------------------
+# VIRTUAL ENVIRONMENTS
+# -------------------------
 venv/
 env/
+ENV/
+.venv/
 
-# Data / models
+# -------------------------
+# SYSTEM FILES
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# LOG FILES
+# -------------------------
+*.log
+logs/
+debug.log
+
+# -------------------------
+# MODEL FILES (ML artifacts)
+# -------------------------
 *.pkl
 *.joblib
-preprocessed_dataset.csv
-/Infernce/policy_history/
+*.h5
+*.model
+models/
+artifacts/
 
-# IDE / OS
+# -------------------------
+# DATA FILES (sensitive / large)
+# -------------------------
+*.csv
+*.xlsx
+*.json
+data/
+datasets/
+
+# -------------------------
+# API CACHE / TOKENS
+# -------------------------
+token_cache.json
+cache/
+.tmp/
+
+# -------------------------
+# BUILD / DIST
+# -------------------------
+build/
+dist/
+*.egg-info/
+
+# -------------------------
+# JUPYTER
+# -------------------------
+.ipynb_checkpoints/
+
+# -------------------------
+# TEST / COVERAGE
+# -------------------------
+.coverage
+htmlcov/
+.pytest_cache/
+
+# -------------------------
+# IDE FILES
+# -------------------------
 .vscode/
 .idea/
-.DS_Store
+*.swp
+*.swo
