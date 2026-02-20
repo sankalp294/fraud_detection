@@ -81,7 +81,7 @@ def generate_reasoning(row):
     # USER BEHAVIOUR
     # ---------------------------------------------------
 
-    if user_claims >= 3:
+    if user_claims >= 5:
         reasons.append("User has frequent claim history")
 
     if user_claims >= 2 and user_max > 600000:
