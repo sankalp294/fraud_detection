@@ -12,6 +12,7 @@ A comprehensive machine learning-based fraud detection system for insurance clai
   - [Model Training](#model-training)
   - [Running the API](#running-the-api)
   - [Making Predictions](#making-predictions)
+- [Docker Deployment](#docker-deployment)
 - [Configuration](#configuration)
 - [API Endpoints](#api-endpoints)
 - [Model Architecture](#model-architecture)
@@ -142,21 +143,35 @@ cd Inference
 python app.py
 ```
 
-The Flask server will start on `http://localhost:5000`
+The Flask server will start on `http://localhost:5002`
 
 ### Making Predictions
 
 **Request Format:**
 ```bash
-curl -X POST http://localhost:5000/predict \
+curl -X POST http://localhost:5002/predict \
   -H "Content-Type: application/json" \
   -d '{
-    "policy_id": "POL123",
-    "insured_id": "INS456",
-    "hospital_id": "HOSP789",
-    "checkin_date": "2024-01-15",
-    "cover_amount": 50000,
-    "check_option": "standard"
+      "check_option": "IPD",
+      "checkin_date": "2023-08-06 0:00:00",
+      "checkout_date": "2023-08-09 16:42:21",
+      "checkout_status": 6,
+      "checkout_status_name": "Paid",
+      "company": "ບໍລິສັດ ແມ່ຂອງ ປູກຕົົ້ນໄມ້",
+      "cover_amount": 1647000,
+      "currency_id": 1,
+      "currency_name": "LAK",
+      "disease_id": 31953,
+      "disease_name": "UTI + Dyspepsia",
+      "final_claim_payment": 1647000,
+      "full_name": "Hongkham Xayyavong",
+      "gender": "M",
+      "hospital_id": 6,
+      "insured_id": "HPA00160-20",
+      "policy_id": "HPA00160",
+      "reference_no": "APAIPD001531",
+      "thb_sell": 592.8,
+      "usd_buy": 19399
   }'
 ```
 
@@ -176,6 +191,58 @@ curl -X POST http://localhost:5000/predict \
     ],
     "status": "success"
 }
+```
+
+## Docker Deployment
+
+This project includes Docker support for easy deployment and scaling. For a complete beginner's guide, see [DOCKER_GUIDE.md](DOCKER_GUIDE.md).
+
+### Quick Start with Docker
+
+**Prerequisites**: Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
+
+**Windows Users**: Double-click `run-docker.bat` or run:
+```bash
+docker-compose up
+```
+
+**macOS/Linux Users**:
+```bash
+docker-compose up
+```
+
+The API will be available at `http://localhost:5000`
+
+### Build and Run Steps
+
+1. **Build the Docker image**:
+   ```bash
+   docker build -t fraud-detection:latest .
+   ```
+
+2. **Run with docker-compose** (recommended):
+   ```bash
+   docker-compose up
+   ```
+
+3. **Run with Docker only**:
+   ```bash
+   docker run -p 5000:5000 fraud-detection:latest
+   ```
+
+### Files Included
+
+- `Dockerfile`: Container setup instructions
+- `docker-compose.yml`: Multi-container orchestration
+- `.dockerignore`: Exclude files from container
+- `run-docker.bat`: Easy startup script (Windows)
+- `DOCKER_GUIDE.md`: Detailed Docker tutorial
+
+### Stopping the Container
+
+Press `Ctrl+C` in the terminal, or run:
+```bash
+docker-compose down
 ```
 
 ## Configuration
