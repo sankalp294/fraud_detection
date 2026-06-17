@@ -163,10 +163,18 @@ curl -X POST http://localhost:5000/predict \
 **Response:**
 ```json
 {
-  "prediction": 0,
-  "confidence": 0.95,
-  "anomaly_score": 0.12,
-  "status": "success"
+    "predictions": [
+        {
+            "anomaly_score": 0.017190661892136805,
+            "fraud_flag": 0,
+            "fraud_prob": 0.3311656713485718,
+            "is_sus": 0,
+            "reason_codes": [
+                "Claim appears normal based on history and model signals"
+            ]
+        }
+    ],
+    "status": "success"
 }
 ```
 
@@ -203,9 +211,12 @@ Predicts whether a claim is fraudulent.
 - `check_option` (string): Type of check option
 
 **Response:**
-- `prediction`: 0 (legitimate) or 1 (fraudulent)
-- `confidence`: Model confidence score (0-1)
-- `anomaly_score`: Anomaly detection score
+- `predictions`: Array of prediction objects for each claim
+  - `fraud_flag`: 0 (legitimate) or 1 (fraudulent)
+  - `fraud_prob`: Probability of fraud (0-1)
+  - `anomaly_score`: Anomaly detection score
+  - `is_sus`: Suspicious flag (0 or 1)
+  - `reason_codes`: Array of explanation strings for the decision
 - `status`: "success" or error description
 
 ## Model Architecture
