@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  fraud-detection-api:
+    # Build the image from the Dockerfile in the current directory
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # Name for the container
+    container_name: fraud-detection-api
+    
+    # Port mapping: maps port 5002 inside container to port 5002 on your computer
+    ports:
+      - "5002:5002"
+    
+    # Environment variables for the container
+    environment:
+      - FLASK_APP=Inference/app.py
+      - FLASK_ENV=production
+      - DATA_PATH=/app/model_training/artifacts/preprocessed_dataset.csv
+    
+    # Volumes: mount directories from your computer into the container
+    volumes:
+      # Mount the current directory so changes are reflected
+      - .:/app
+      # Mount models directory to persist trained models
+      - ./model_training/models:/app/model_training/models
+    
+    # Restart policy: always restart if the container stops
+    restart: unless-stopped
+    
+    # Health check to ensure the API is running
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/predict || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
